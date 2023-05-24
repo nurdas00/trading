@@ -1,0 +1,3 @@
+com\example\trading\controller\TradingController.class
+com\example\trading\service\TradingService.class
+com\example\trading\TradingApplication.class
