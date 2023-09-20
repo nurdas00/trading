@@ -44,7 +44,7 @@ public class TradingService {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.of(2023, 9, 13, 17, 1);
+        LocalDateTime now = LocalDateTime.of(2023, 9, 18, 14, 1);
         now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
@@ -53,12 +53,16 @@ public class TradingService {
 
         for (Currency currency : currencies) {
             List<OrderBlock> orderBlocks = calculateInitialTrend(currency, now.minusHours(3));
+            String message;
             if (!orderBlocks.isEmpty()) {
-                telegramBotService.sendMessage("Ордер блоки для " + currency + " на " + day + "." + month + "." + year + " " + hour + ":00\n" +
-                        orderBlockListToString(orderBlocks), currency);
+                message = "Ордер блоки для " + currency + " на " + day + "." + month + "." + year + " " + hour + ":00\n" +
+                        orderBlockListToString(orderBlocks);
 
                 resultMap.put(currency, orderBlocks);
+            } else {
+                message = "Нет ордер блоков на " + day + "." + month + "." + year + " " + hour + ":00 для " + currency;
             }
+            telegramBotService.sendMessage(message, currency);
         }
 
         return resultMap;
@@ -66,7 +70,7 @@ public class TradingService {
 
     public List<OrderBlock> calculateInitialTrend(Currency currency, LocalDateTime dateTo) {
 
-        log.info("Start method");
+        log.info("Start method for " + currency.name());
 
         zoneMax = new ArrayList<>();
         zoneMin = new ArrayList<>();
@@ -233,6 +237,9 @@ public class TradingService {
         List<Pair<Boolean, Candle>> fractalCandles = getFractalCandles(candles);
         LocalDateTime firstZone = zoneBegin.plusMinutes(24);
 
+        isUp = fractalCandles.get(0).getFirst();
+        currentDiapason = Pair.of(candles.get(0), fractalCandles.get(0).getSecond());
+
         for (Pair<Boolean, Candle> currentFractal : fractalCandles) {
             calculateTrend(currentFractal);
 
@@ -259,11 +266,11 @@ public class TradingService {
         zoneMin.removeIf(minCandle -> lastCandle.getLow() < minCandle.getLow());
         zoneMax.removeIf(maxCandle -> lastCandle.getHigh() > maxCandle.getHigh());
 
-        if(!zoneMax.isEmpty()) {
+        if (!zoneMax.isEmpty()) {
             zoneMax = Collections.singletonList(zoneMax.get(0));
         }
 
-        if(!zoneMin.isEmpty()) {
+        if (!zoneMin.isEmpty()) {
             zoneMin = Collections.singletonList(zoneMin.get(0));
         }
 
