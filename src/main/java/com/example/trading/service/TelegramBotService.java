@@ -52,6 +52,7 @@ public class TelegramBotService extends TelegramLongPollingBot {
             if(user.getGbp() == null || !user.getGbp()) {
                 user.setGbp(true);
                 userRepository.save(user);
+                log.info("User " + user.getUserName() + " subscribed to GBP");
                 sendMessage(chatId, "Вы подписались на рассылку по фунтам");
             } else {
                 sendMessage(chatId, "Вы уже получаете рассылку по фунтам");
@@ -61,6 +62,7 @@ public class TelegramBotService extends TelegramLongPollingBot {
             if(user.getEur() == null || !user.getEur()) {
                 user.setEur(true);
                 userRepository.save(user);
+                log.info("User " + user.getUserName() + " subscribed to EUR");
                 sendMessage(chatId, "Вы подписались на рассылку по евро");
             } else {
                 sendMessage(chatId, "Вы уже получаете рассылку по евро");

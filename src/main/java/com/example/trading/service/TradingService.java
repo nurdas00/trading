@@ -31,11 +31,11 @@ public class TradingService {
     private List<Candle> zoneMax;
     private List<Candle> zoneMin;
 
-    List<Pair<Candle, Candle>> upImbalance = new ArrayList<>();
-    List<Pair<Candle, Candle>> downImbalance = new ArrayList<>();
+    private List<Pair<Candle, Candle>> upImbalance;
+    private List<Pair<Candle, Candle>> downImbalance;
 
-    Pair<Candle, Candle> currentDiapason;
-    Candle impulseBegin;
+    private Pair<Candle, Candle> currentDiapason;
+    private Candle impulseBegin;
     private boolean isCorrection = false;
     private boolean justBoss = true;
     private final List<OrderBlock> emptyListOfOrderBlocks = new ArrayList<>();
@@ -44,7 +44,7 @@ public class TradingService {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.of(2023, 9, 18, 14, 1);
+        LocalDateTime now = LocalDateTime.now();
         now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
@@ -68,12 +68,14 @@ public class TradingService {
         return resultMap;
     }
 
-    public List<OrderBlock> calculateInitialTrend(Currency currency, LocalDateTime dateTo) {
+    private List<OrderBlock> calculateInitialTrend(Currency currency, LocalDateTime dateTo) {
 
         log.info("Start method for " + currency.name());
 
         zoneMax = new ArrayList<>();
         zoneMin = new ArrayList<>();
+        downImbalance = new ArrayList<>();
+        upImbalance = new ArrayList<>();
 
         List<Candle> candles = dataSupplierService.getCandles(currency, dateTo);
         List<Pair<Boolean, Candle>> fractalCandles = getFractalCandles(candles);
@@ -83,7 +85,7 @@ public class TradingService {
 
         List<Pair<Candle, Candle>> orderBlocks = new ArrayList<>();
 
-        calculateImbalances(candles, dateTo.minusHours(2), dateTo.minusHours(1));
+        calculateImbalances(candles, dateTo.minusHours(2).minusMinutes(1), dateTo.minusHours(1));
 
         if (isUp && candles.get(candles.size() - 1).getLow() < currentDiapason.getSecond().getLow()) {
             isCorrection = true;
@@ -244,6 +246,10 @@ public class TradingService {
             calculateTrend(currentFractal);
 
             Candle currentCandle = currentFractal.getSecond();
+
+            zoneMin.removeIf(minCandle -> currentCandle.getLow() < minCandle.getLow());
+            zoneMax.removeIf(maxCandle -> currentCandle.getHigh() > maxCandle.getHigh());
+
             OffsetDateTime currentTime = currentCandle.getStartDateTime();
             if (!currentTime.isBefore(zoneBegin.atOffset(ZoneOffset.UTC)) &&
                     !currentTime.isAfter(zoneEnd.atOffset(ZoneOffset.UTC))) {
@@ -257,9 +263,6 @@ public class TradingService {
                     }
                 }
             }
-
-            zoneMin.removeIf(minCandle -> currentCandle.getLow() < minCandle.getLow());
-            zoneMax.removeIf(maxCandle -> currentCandle.getHigh() > maxCandle.getHigh());
         }
 
         Candle lastCandle = candles.get(candles.size() - 1);
