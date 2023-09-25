@@ -68,6 +68,11 @@
             <artifactId>jsoup</artifactId>
             <version>1.14.3</version>
         </dependency>
+        <dependency>
+            <groupId>cloud.metaapi.sdk</groupId>
+            <artifactId>metaapi-java-sdk</artifactId>
+            <version>14.0.8</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

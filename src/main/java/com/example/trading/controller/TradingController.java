@@ -1,5 +1,6 @@
 package com.example.trading.controller;
 
+import com.example.trading.service.MetaTraderService;
 import com.example.trading.model.Currency;
 import com.example.trading.model.OrderBlock;
 import com.example.trading.service.TradingService;
@@ -15,6 +16,7 @@ import java.util.Map;
 public class TradingController {
 
     private final TradingService tradingService;
+    private final MetaTraderService metaConfig;
 
     @GetMapping("/get-trading")
     public Map<Currency, List<OrderBlock>> getTrading() {

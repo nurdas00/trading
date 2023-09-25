@@ -1,5 +1,6 @@
 package com.example.trading.service;
 
+import cloud.metaapi.sdk.clients.TimeoutException;
 import com.example.trading.model.Candle;
 import com.example.trading.model.Currency;
 import com.example.trading.model.OrderBlock;
@@ -24,6 +25,8 @@ public class TradingService {
 
     private final DataSupplierService dataSupplierService;
     private final TelegramBotService telegramBotService;
+    private final MetaTraderService metaTraderService;
+
     private boolean isUp;
     private Candle hl = new Candle();
     private Candle lh = new Candle();
@@ -59,6 +62,11 @@ public class TradingService {
                         orderBlockListToString(orderBlocks);
 
                 resultMap.put(currency, orderBlocks);
+
+                try {
+                    metaTraderService.openTransaction(orderBlocks.get(0));
+                } catch (TimeoutException ignored) {
+                }
             } else {
                 message = "Нет ордер блоков на " + day + "." + month + "." + year + " " + hour + ":00 для " + currency;
             }
@@ -159,13 +167,18 @@ public class TradingService {
                 }
 
                 if (isUp) {
-                    if (imbalance.getSecond().getLow() - orderBlockFractal.getHigh() <= orderBlockFractal.getHigh() - orderBlockFractal.getLow() &&
-                            (i < orderBlockFractalsList.size() - 1 &&
-                                    imbalances.get(0).getFirst().getStartDateTime().isBefore(orderBlockFractalsList.get(i + 1).getStartDateTime()))
+                    if ((i < orderBlockFractalsList.size() - 1 &&
+                            imbalances.get(0).getFirst().getStartDateTime().isBefore(orderBlockFractalsList.get(i + 1).getStartDateTime()))
                             || i == orderBlockFractalsList.size() - 1) {
-                        orderBlocks.add(Pair.of(imbalance.getSecond(), orderBlockFractal));
-                        orderBlock = prepareOrderBlock(imbalance.getSecond().getLow(), orderBlockFractal.getLow());
-                        orderBlockWithImbalances.add(orderBlock);
+                        if (imbalance.getSecond().getLow() - orderBlockFractal.getHigh() <= orderBlockFractal.getHigh() - orderBlockFractal.getLow()) {
+                            orderBlocks.add(Pair.of(imbalance.getSecond(), orderBlockFractal));
+                            orderBlock = prepareOrderBlock(imbalance.getSecond().getLow(), orderBlockFractal.getLow());
+                            orderBlockWithImbalances.add(orderBlock);
+                        } else {
+                            orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
+                            orderBlock = prepareOrderBlock(orderBlockFractal.getHigh(), orderBlockFractal.getLow());
+                            orderBlockWithImbalances.add(orderBlock);
+                        }
                         imbalances.remove(imbalance);
                     } else {
                         orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
@@ -173,13 +186,18 @@ public class TradingService {
                         orderBlockWithImbalances.add(orderBlock);
                     }
                 } else {
-                    if (orderBlockFractal.getLow() - imbalance.getSecond().getHigh() <= orderBlockFractal.getHigh() - orderBlockFractal.getLow()
-                            && (i < orderBlockFractalsList.size() - 1 &&
+                    if ((i < orderBlockFractalsList.size() - 1 &&
                             !imbalances.get(0).getFirst().getStartDateTime().isAfter(orderBlockFractalsList.get(i + 1).getStartDateTime())
                             || i == orderBlockFractalsList.size() - 1)) {
-                        orderBlocks.add(Pair.of(imbalance.getSecond(), orderBlockFractal));
-                        orderBlock = prepareOrderBlock(imbalance.getSecond().getHigh(), orderBlockFractal.getHigh());
-                        orderBlockWithImbalances.add(orderBlock);
+                        if (orderBlockFractal.getLow() - imbalance.getSecond().getHigh() <= orderBlockFractal.getHigh() - orderBlockFractal.getLow()) {
+                            orderBlocks.add(Pair.of(imbalance.getSecond(), orderBlockFractal));
+                            orderBlock = prepareOrderBlock(imbalance.getSecond().getHigh(), orderBlockFractal.getHigh());
+                            orderBlockWithImbalances.add(orderBlock);
+                        } else {
+                            orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
+                            orderBlock = prepareOrderBlock(orderBlockFractal.getLow(), orderBlockFractal.getHigh());
+                            orderBlockWithImbalances.add(orderBlock);
+                        }
                         imbalances.remove(imbalance);
 
                     } else {
