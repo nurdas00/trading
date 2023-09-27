@@ -1,6 +1,5 @@
 package com.example.trading.service;
 
-import cloud.metaapi.sdk.clients.TimeoutException;
 import com.example.trading.model.Candle;
 import com.example.trading.model.Currency;
 import com.example.trading.model.OrderBlock;
@@ -47,7 +46,7 @@ public class TradingService {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.of(2023, 9, 26, 11, 1,0);
         now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
@@ -58,15 +57,19 @@ public class TradingService {
             List<OrderBlock> orderBlocks = calculateInitialTrend(currency, now.minusHours(3));
             String message;
             if (!orderBlocks.isEmpty()) {
-                message = "Ордер блоки для " + currency + " на " + day + "." + month + "." + year + " " + hour + ":00\n" +
+                String transaction;
+                if (orderBlocks.get(0).getOpenPrice() > orderBlocks.get(0).getStopLoss()) {
+                    transaction = "Long";
+                } else {
+                    transaction = "Short";
+                }
+                message = transaction + "\n" + currency + "\n" +
+                        day + "." + month + "." + year + " " + hour + ":00\n" +
                         orderBlockListToString(orderBlocks);
 
                 resultMap.put(currency, orderBlocks);
 
-                try {
-                    metaTraderService.openTransaction(orderBlocks.get(0));
-                } catch (TimeoutException ignored) {
-                }
+                metaTraderService.openTransaction(currency, orderBlocks.get(0));
             } else {
                 message = "Нет ордер блоков на " + day + "." + month + "." + year + " " + hour + ":00 для " + currency;
             }
@@ -245,9 +248,9 @@ public class TradingService {
         float tp = sl + (price - sl) * 5;
         tp = Float.parseFloat(BigDecimal.valueOf(tp).setScale(5, RoundingMode.HALF_UP).toString());
         OrderBlock orderBlock = new OrderBlock();
-        orderBlock.setPrice(price);
-        orderBlock.setSl(sl);
-        orderBlock.setTp(tp);
+        orderBlock.setOpenPrice(price);
+        orderBlock.setStopLoss(sl);
+        orderBlock.setTakeProfit(tp);
 
         return orderBlock;
     }
@@ -265,9 +268,12 @@ public class TradingService {
 
             Candle currentCandle = currentFractal.getSecond();
 
-            zoneMin.removeIf(minCandle -> currentCandle.getLow() < minCandle.getLow());
-            zoneMax.removeIf(maxCandle -> currentCandle.getHigh() > maxCandle.getHigh());
-
+            if(!zoneMin.isEmpty()) {
+                zoneMin.removeIf(minCandle -> currentCandle.getLow() < minCandle.getLow());
+            }
+            if(!zoneMax.isEmpty()) {
+                zoneMax.removeIf(maxCandle -> currentCandle.getHigh() > maxCandle.getHigh());
+            }
             OffsetDateTime currentTime = currentCandle.getStartDateTime();
             if (!currentTime.isBefore(zoneBegin.atOffset(ZoneOffset.UTC)) &&
                     !currentTime.isAfter(zoneEnd.atOffset(ZoneOffset.UTC))) {

@@ -21,7 +21,7 @@ public class TelegramBotService extends TelegramLongPollingBot {
 
     private final UserRepository userRepository;
 
-    private String botToken = "6497420230:AAF-wq6A0YpY8wJN2C_Huc1muZSnE2n4Wls";
+    private String botToken = "6497420230:AAF7VdbtD-Iz4q6Q3_Q8PQ2OOF4XNYaZmDg";
     private String botUsername = "nulTradingBot";
 
     private String textOnStart = "Добро пожаловать. Ордер блоки появляются каждые три часа начиная с 02:00 по МСК";

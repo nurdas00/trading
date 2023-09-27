@@ -8,7 +8,10 @@ import lombok.ToString;
 @Setter
 @ToString
 public class OrderBlock {
-    private Float price;
-    private Float sl;
-    private Float tp;
+    private Float openPrice;
+    private Float stopLoss;
+    private Float takeProfit;
+    private Float volume;
+    private String actionType;
+    private String symbol;
 }
