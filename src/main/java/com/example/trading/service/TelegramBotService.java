@@ -21,7 +21,7 @@ public class TelegramBotService extends TelegramLongPollingBot {
 
     private final UserRepository userRepository;
 
-    private String botToken = "6497420230:AAF7VdbtD-Iz4q6Q3_Q8PQ2OOF4XNYaZmDg";
+    private String botToken = "6497420230:AAEsKcd6HVtJ6b8Usb6DfhtD641J834qSPw";
     private String botUsername = "nulTradingBot";
 
     private String textOnStart = "Добро пожаловать. Ордер блоки появляются каждые три часа начиная с 02:00 по МСК";
@@ -30,7 +30,8 @@ public class TelegramBotService extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
-        log.info("Received message from: " + update.getMessage().getFrom().getUserName());
+        log.info("Received message from " + update.getMessage().getFrom().getUserName() +
+                ": " + update.getMessage().getText());
 
         List<User> usersList = userRepository.findAll();
         Long chatId = update.getMessage().getChatId();
