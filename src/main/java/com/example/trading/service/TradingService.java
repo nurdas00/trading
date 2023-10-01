@@ -46,7 +46,7 @@ public class TradingService {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.of(2023, 9, 28, 17, 1, 0);
+        LocalDateTime now = LocalDateTime.now();
         now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
