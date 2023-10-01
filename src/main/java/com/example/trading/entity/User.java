@@ -16,4 +16,7 @@ public class User {
     private String userName;
     private Boolean gbp;
     private Boolean eur;
+    @Lob
+    private String metaToken;
+    private String metaAccountId;
 }

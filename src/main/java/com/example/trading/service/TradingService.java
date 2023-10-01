@@ -46,7 +46,7 @@ public class TradingService {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.of(2023, 9, 28, 17, 1, 0);
         now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
@@ -268,10 +268,10 @@ public class TradingService {
 
             Candle currentCandle = currentFractal.getSecond();
 
-            if(!zoneMin.isEmpty()) {
+            if (!zoneMin.isEmpty()) {
                 zoneMin.removeIf(minCandle -> currentCandle.getLow() < minCandle.getLow());
             }
-            if(!zoneMax.isEmpty()) {
+            if (!zoneMax.isEmpty()) {
                 zoneMax.removeIf(maxCandle -> currentCandle.getHigh() > maxCandle.getHigh());
             }
             OffsetDateTime currentTime = currentCandle.getStartDateTime();
