@@ -211,7 +211,10 @@ public class TradingService {
                 }
             }
 
-
+            if(!orderBlocks.isEmpty()) {
+                log.info("OrderBlock first candle: " + orderBlocks.get(0).getFirst() +
+                        "second candle: " + orderBlocks.get(0).getSecond());
+            }
             return orderBlockWithImbalances;
         }
 
