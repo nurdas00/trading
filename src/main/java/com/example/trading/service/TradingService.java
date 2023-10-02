@@ -245,7 +245,13 @@ public class TradingService {
     }
 
     private OrderBlock prepareOrderBlock(Float price, Float sl) {
-        float tp = sl + (price - sl) * 5;
+        float tp = price + (price - sl) * 6;
+        if (isUp) {
+            tp -= 0.0001;
+        } else {
+            tp += 0.0001;
+        }
+
         tp = Float.parseFloat(BigDecimal.valueOf(tp).setScale(5, RoundingMode.HALF_UP).toString());
         OrderBlock orderBlock = new OrderBlock();
         orderBlock.setOpenPrice(price);

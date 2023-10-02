@@ -54,7 +54,7 @@ public class MetaTraderService {
             }};*/
 
             orderBlock.setSymbol(currency.name() + "USD");
-            BigDecimal volume = BigDecimal.valueOf((float) (accountInfo.balance / abs(orderBlock.getOpenPrice() - orderBlock.getStopLoss()) / 100000000 / 2))
+            BigDecimal volume = BigDecimal.valueOf((float) (accountInfo.balance / abs(orderBlock.getOpenPrice() - orderBlock.getStopLoss()) / 10000000 / 2))
                     .setScale(2, RoundingMode.HALF_UP);
 
             orderBlock.setVolume(volume.floatValue());
