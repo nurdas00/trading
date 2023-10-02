@@ -34,6 +34,9 @@ public class MetaTraderService {
         List<User> users = userRepository.findAll();
 
         for (User user : users) {
+            if(user.getMetaToken()==null || user.getMetaToken().isEmpty()) {
+                continue;
+            }
 
             MetaApi api;
             try {
