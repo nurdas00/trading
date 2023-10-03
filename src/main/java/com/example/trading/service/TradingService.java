@@ -211,7 +211,7 @@ public class TradingService {
                 }
             }
 
-            if(!orderBlocks.isEmpty()) {
+            if (!orderBlocks.isEmpty()) {
                 log.info("OrderBlock first candle: " + orderBlocks.get(0).getFirst() +
                         "second candle: " + orderBlocks.get(0).getSecond());
             }
@@ -250,9 +250,9 @@ public class TradingService {
     private OrderBlock prepareOrderBlock(Float price, Float sl) {
         float tp = price + (price - sl) * 6;
         if (isUp) {
-            tp -= 0.0001;
+            sl -= (float) 0.0001;
         } else {
-            tp += 0.0001;
+            sl += (float) 0.0001;
         }
 
         tp = Float.parseFloat(BigDecimal.valueOf(tp).setScale(5, RoundingMode.HALF_UP).toString());
