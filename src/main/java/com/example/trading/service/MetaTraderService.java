@@ -90,7 +90,7 @@ public class MetaTraderService {
                         .block();
             }
 
-            api.close();
+            connection.close().join();
 
             log.info("Response from MT: " + result);
         }
