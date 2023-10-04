@@ -6,6 +6,7 @@ import com.example.trading.model.OrderBlock;
 import com.example.trading.service.TradingService;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -18,8 +19,10 @@ public class TradingController {
     private final TradingService tradingService;
     private final MetaTraderService metaConfig;
 
-    @GetMapping("/get-trading")
-    public Map<Currency, List<OrderBlock>> getTrading() {
-        return tradingService.getOrderBlocks();
+    @GetMapping("/get-trading/{month}/{day}/{hour}")
+    public Map<Currency, List<OrderBlock>> getTrading(@PathVariable int month,
+                                                      @PathVariable int day,
+                                                      @PathVariable int hour) {
+        return tradingService.getOrderBlocks(month, day, hour);
     }
 }

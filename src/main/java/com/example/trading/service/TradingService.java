@@ -42,12 +42,15 @@ public class TradingService {
     private boolean justBoss = true;
     private final List<OrderBlock> emptyListOfOrderBlocks = new ArrayList<>();
 
-    public Map<Currency, List<OrderBlock>> getOrderBlocks() {
+    public Map<Currency, List<OrderBlock>> getOrderBlocks(int month, int day, int hour) {
+        LocalDateTime date = LocalDateTime.of(2023, month, day, hour, 1);
+        return getOrderBlocks(date.minusHours(3));
+    }
+
+    public Map<Currency, List<OrderBlock>> getOrderBlocks(LocalDateTime now) {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.now();
-        now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
         String year = String.valueOf(now.getYear());

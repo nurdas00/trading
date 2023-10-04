@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -15,6 +17,6 @@ public class ScheduleService {
     @Scheduled(cron = "0 1 2,8-20/3,23 * * MON-FRI")
     public void execute() {
         log.info("Started scheduled invoke");
-        tradingService.getOrderBlocks();
+        tradingService.getOrderBlocks(LocalDateTime.now().minusHours(3));
     }
 }
