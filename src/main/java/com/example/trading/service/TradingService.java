@@ -248,7 +248,7 @@ public class TradingService {
     }
 
     private OrderBlock prepareOrderBlock(Float price, Float sl) {
-        float tp = price + (price - sl) * 6;
+        float tp = (float) (price + (price - sl) * 5.5);
         if (isUp) {
             sl -= (float) 0.0001;
         } else {
