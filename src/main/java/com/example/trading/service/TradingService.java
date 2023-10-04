@@ -46,7 +46,7 @@ public class TradingService {
         Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.of(2023, 10, 4, 14, 0, 1);
         now = now.minusHours(3);
         String day = String.valueOf(now.getDayOfMonth());
         String month = String.valueOf(now.getMonthValue());
@@ -215,6 +215,15 @@ public class TradingService {
                 log.info("OrderBlock first candle: " + orderBlocks.get(0).getFirst() +
                         "second candle: " + orderBlocks.get(0).getSecond());
             }
+            orderBlockWithImbalances.forEach(ob -> {
+                float op = ob.getOpenPrice();
+                float sl = ob.getStopLoss();
+                if (abs(sl - op) > 0.0005) {
+                    op = (float) (isUp ? sl + 0.0005 : sl - 0.0005);
+                }
+
+                ob.setOpenPrice(op);
+            });
             return orderBlockWithImbalances;
         }
 
