@@ -14,7 +14,7 @@ public class ScheduleService {
 
     private final TradingService tradingService;
 
-    @Scheduled(cron = "0 1 2,8-20/3,23 * * MON-FRI")
+    @Scheduled(cron = "0 1 1,7-19/3,22 * * MON-FRI")
     public void execute() {
         log.info("Started scheduled invoke");
         tradingService.getOrderBlocks(LocalDateTime.now().minusHours(3));
