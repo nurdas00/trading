@@ -26,7 +26,7 @@ public class TelegramBotService extends TelegramLongPollingBot {
 
     private String textOnStart = "Добро пожаловать. Ордер блоки появляются каждые три часа начиная с 02:00 по МСК";
     private String textOnError = "Дождитесь появления оптимальных ордер блоков. " +
-            "Они появляются каждые три часа начиная с 02:00 по МСК";
+            "Они появляются каждые три часа начиная с 01:00 по МСК";
 
     @Override
     public void onUpdateReceived(Update update) {
