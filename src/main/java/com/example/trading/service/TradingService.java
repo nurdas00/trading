@@ -223,7 +223,7 @@ public class TradingService {
                 float sl = ob.getStopLoss();
                 if (abs(sl - op) > 0.0005) {
                     op = (float) (isUp ? sl + 0.0005 : sl - 0.0005);
-                    float tp = (float) (isUp ? op + 0.0275 : op - 0.0275);
+                    float tp = (float) (isUp ? op + 0.00275 : op - 0.00275);
 
                     ob.setOpenPrice(op);
                     ob.setTakeProfit(tp);
