@@ -14,13 +14,8 @@ public class DataSupplierService {
     private String UrlSample = "https://market-data.tavex.lv/v1/chart-data/xignite-currencies?symbol=tradingCurrency&currency=USD&from=dateFromZ&to=dateTo&interval=PT3M";
     private final WebClient webClient = WebClient.create();
     public List<Candle> getCandles(Currency currency, LocalDateTime dateTo) {
-        LocalDateTime dateFrom;
-       /* if (hour < 5) {
-            dateFrom = LocalDateTime.now();
+        LocalDateTime dateFrom = dateTo.minusHours(3);
 
-        } else {*/
-        dateFrom = dateTo.minusHours(3);
-        //}
         String URI = UrlSample;
         URI = URI.replace("dateFrom", dateFrom.toString());
         URI = URI.replace("dateTo", dateTo.toString());
