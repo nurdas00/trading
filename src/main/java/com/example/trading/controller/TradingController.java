@@ -20,9 +20,19 @@ public class TradingController {
     private final MetaTraderService metaConfig;
 
     @GetMapping("/get-trading/{month}/{day}/{hour}")
-    public Map<Currency, List<OrderBlock>> getTrading(@PathVariable int month,
+    public Map<Currency, OrderBlock> getTrading(@PathVariable int month,
                                                       @PathVariable int day,
                                                       @PathVariable int hour) {
         return tradingService.getOrderBlocks(month, day, hour);
+    }
+
+    @GetMapping("/get-trend/{month}/{day}/{hour}/{currency}")
+    public String getTrend(@PathVariable int month,
+                           @PathVariable int day,
+                           @PathVariable int hour,
+                           @PathVariable Currency currency) {
+        boolean isUp = tradingService.getTrend(month, day, hour, currency);
+
+        return isUp ? "Up" : "Down";
     }
 }

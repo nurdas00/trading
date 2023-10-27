@@ -72,6 +72,11 @@ public class MetaTraderService {
                     .defaultHeader("auth-token", user.getMetaToken())
                     .build();
 
+            log.info("Opening transaction : " + orderBlock
+                    + "\nvolume: " + orderBlock.getVolume()
+                    + "\nactionType: " + orderBlock.getActionType()
+                    + "\nsymbol: " + orderBlock.getSymbol());
+
             String result = webClient.post()
                     .uri(user.getMetaAccountId() + "/trade")
                     .body(Mono.just(orderBlock), OrderBlock.class)
@@ -81,6 +86,7 @@ public class MetaTraderService {
 
             assert result != null;
             if (result.contains("TRADE_RETCODE_INVALID_PRICE")) {
+                log.info("Invalid action type, trying STOP transaction");
                 orderBlock.setActionType(orderBlock.getActionType().replace("LIMIT", "STOP"));
                 result = webClient.post()
                         .uri(user.getMetaAccountId() + "/trade")

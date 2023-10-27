@@ -11,7 +11,7 @@ import java.util.List;
 
 @Service
 public class DataSupplierService {
-    private String UrlSample = "https://market-data.tavex.lv/v1/chart-data/xignite-currencies?symbol=tradingCurrency&currency=USD&from=dateFromZ&to=dateTo&interval=PT3M";
+    private final String UrlSample = "https://market-data.tavex.lv/v1/chart-data/xignite-currencies?symbol=tradingCurrency&currency=USD&from=dateFromZ&to=dateTo&interval=PT3M";
     private final WebClient webClient = WebClient.create();
     public List<Candle> getCandles(Currency currency, LocalDateTime dateTo) {
         LocalDateTime dateFrom = dateTo.minusHours(3);

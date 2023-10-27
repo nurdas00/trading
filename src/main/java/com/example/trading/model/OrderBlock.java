@@ -14,7 +14,6 @@ public class OrderBlock {
     private Float volume;
     private String actionType;
     private String symbol;
-
     @Override
     public String toString() {
         return "price: " + openPrice + "\nstop loss: " + stopLoss + "\ntake profit: " + takeProfit;

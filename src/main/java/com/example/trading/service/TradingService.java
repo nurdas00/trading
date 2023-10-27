@@ -11,9 +11,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static java.lang.Math.abs;
 
@@ -26,29 +26,26 @@ public class TradingService {
     private final TelegramBotService telegramBotService;
     private final MetaTraderService metaTraderService;
 
-    private boolean isUp;
-    private Candle hl = new Candle();
-    private Candle lh = new Candle();
-
-    private List<Candle> zoneMax;
-    private List<Candle> zoneMin;
-
     private List<Pair<Candle, Candle>> upImbalance;
     private List<Pair<Candle, Candle>> downImbalance;
 
     private Pair<Candle, Candle> currentDiapason;
-    private Candle impulseBegin;
     private boolean isCorrection = false;
-    private boolean justBoss = true;
-    private final List<OrderBlock> emptyListOfOrderBlocks = new ArrayList<>();
 
-    public Map<Currency, List<OrderBlock>> getOrderBlocks(int month, int day, int hour) {
+    public boolean getTrend(int month, int day, int hour, Currency currency) {
+        LocalDateTime date = LocalDateTime.of(2023, month, day, hour, 1);
+        List<Candle> candles = dataSupplierService.getCandles(currency, date.minusHours(6));
+
+        return calculateTrend(candles);
+    }
+
+    public Map<Currency, OrderBlock> getOrderBlocks(int month, int day, int hour) {
         LocalDateTime date = LocalDateTime.of(2023, month, day, hour, 1);
         return getOrderBlocks(date.minusHours(3));
     }
 
-    public Map<Currency, List<OrderBlock>> getOrderBlocks(LocalDateTime now) {
-        Map<Currency, List<OrderBlock>> resultMap = new HashMap<>();
+    public Map<Currency, OrderBlock> getOrderBlocks(LocalDateTime now) {
+        Map<Currency, OrderBlock> resultMap = new HashMap<>();
         Currency[] currencies = Currency.values();
 
         String day = String.valueOf(now.getDayOfMonth());
@@ -57,22 +54,24 @@ public class TradingService {
         String hour = String.valueOf(now.getHour());
 
         for (Currency currency : currencies) {
-            List<OrderBlock> orderBlocks = calculateInitialTrend(currency, now.minusHours(3));
+            Optional<OrderBlock> optionalOrderBlock = getOrderBlockForCurrency(currency, now.minusHours(3));
             String message;
-            if (!orderBlocks.isEmpty()) {
+            if (optionalOrderBlock.isPresent()) {
+                OrderBlock orderBlock = optionalOrderBlock.get();
                 String transaction;
-                if (orderBlocks.get(0).getOpenPrice() > orderBlocks.get(0).getStopLoss()) {
+                if (orderBlock.getOpenPrice() > orderBlock.getStopLoss()) {
                     transaction = "Long";
                 } else {
                     transaction = "Short";
                 }
-                message = transaction + "\n" + currency + "\n" +
+                message = transaction + "\n" +
+                        currency + "\n" +
                         day + "." + month + "." + year + " " + hour + ":00\n" +
-                        orderBlockListToString(orderBlocks);
+                        orderBlock + "\n";
 
-                resultMap.put(currency, orderBlocks);
+                resultMap.put(currency, orderBlock);
 
-                metaTraderService.openTransaction(currency, orderBlocks.get(0));
+                metaTraderService.openTransaction(currency, orderBlock);
             } else {
                 message = "Нет ордер блоков на " + day + "." + month + "." + year + " " + hour + ":00 для " + currency;
             }
@@ -82,188 +81,83 @@ public class TradingService {
         return resultMap;
     }
 
-    private List<OrderBlock> calculateInitialTrend(Currency currency, LocalDateTime dateTo) {
+    private Optional<OrderBlock> getOrderBlockForCurrency(Currency currency, LocalDateTime dateTo) {
 
         log.info("Start method for " + currency.name());
 
-        zoneMax = new ArrayList<>();
-        zoneMin = new ArrayList<>();
         downImbalance = new ArrayList<>();
         upImbalance = new ArrayList<>();
 
         List<Candle> candles = dataSupplierService.getCandles(currency, dateTo);
-        List<Pair<Boolean, Candle>> fractalCandles = getFractalCandles(candles);
 
-        lh = hl = candles.get(0);
         currentDiapason = Pair.of(candles.get(0), candles.get(0));
 
-        List<Pair<Candle, Candle>> orderBlocks = new ArrayList<>();
+        boolean isUp = calculateTrend(candles);
+        Candle obCandle = calculateImbalances(candles, dateTo.minusHours(2).minusMinutes(1), dateTo.minusHours(1), isUp);
 
-        calculateImbalances(candles, dateTo.minusHours(2).minusMinutes(1), dateTo.minusHours(1));
+        Optional<Candle> obClosingCandle = candles.stream().filter(ob ->
+                        ob.getStartDateTime().isAfter(dateTo.minusHours(1).atOffset(ZoneOffset.UTC)))
+                .filter(ob -> {
+                    if (isUp) {
+                        return ob.getLow() <= obCandle.getLow();
+                    } else {
+                        return ob.getHigh() >= obCandle.getHigh();
+                    }
+                })
+                .findFirst();
 
-        if (isUp && candles.get(candles.size() - 1).getLow() < currentDiapason.getSecond().getLow()) {
-            isCorrection = true;
-        } else if (!isUp && candles.get(candles.size() - 1).getHigh() > currentDiapason.getSecond().getHigh()) {
-            isCorrection = true;
+        if (obClosingCandle.isPresent()) {
+            return Optional.empty();
         }
 
         if (isCorrection) {
             List<Pair<Candle, Candle>> imbalances;
-            List<Candle> orderBlockFractalsList;
-
-            orderBlockFractalsList = isUp ? zoneMin : zoneMax;
             imbalances = isUp ? downImbalance : upImbalance;
 
-            List<OrderBlock> orderBlockWithImbalances = new ArrayList<>();
+            Pair<Candle, Candle> obWithImbalance;
 
-            List<Candle> toDelete = new ArrayList<>();
-            for (int i = 0; i < orderBlockFractalsList.size() - 1; i++) {
-                for (int j = i + 1; j < orderBlockFractalsList.size(); j++) {
-                    if (isOneZoneInsideAnother(orderBlockFractalsList.get(i), orderBlockFractalsList.get(j)) ||
-                            areTwoZonesIntercept(orderBlockFractalsList.get(i), orderBlockFractalsList.get(j))) {
-                        toDelete.add(orderBlockFractalsList.get(j));
-                    }
-                }
-            }
-
-            orderBlockFractalsList.removeAll(toDelete);
-            for (int i = 0; i < orderBlockFractalsList.size(); i++) {
-                Candle orderBlockFractal = orderBlockFractalsList.get(i);
-                if (orderBlockFractal.getHigh() - orderBlockFractal.getLow() > 0.0055) {
-                    if (isUp) {
-                        orderBlockFractal.setHigh((float) (orderBlockFractal.getLow() + 0.0055));
-                    } else {
-                        orderBlockFractal.setLow((float) (orderBlockFractal.getHigh() - 0.0055));
-                    }
-                }
-                OrderBlock orderBlock;
-                if (imbalances.size() == 0) {
-                    if (isUp) {
-                        orderBlock = prepareOrderBlock(orderBlockFractal.getHigh(), orderBlockFractal.getLow());
-                        orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                        orderBlockWithImbalances.add(orderBlock);
-                    } else {
-                        orderBlock = prepareOrderBlock(orderBlockFractal.getLow(), orderBlockFractal.getHigh());
-                        orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                        orderBlockWithImbalances.add(orderBlock);
-                    }
-                    continue;
-                }
-
-                while (!imbalances.isEmpty() && imbalances.get(0).getFirst().getStartDateTime().isBefore(orderBlockFractal.getStartDateTime())) {
-                    imbalances.remove(0);
-                }
-
-
-                Pair<Candle, Candle> imbalance;
-
-                if (!imbalances.isEmpty()) {
-                    imbalance = imbalances.get(0);
-                } else {
-                    if (isUp) {
-                        orderBlock = prepareOrderBlock(orderBlockFractal.getHigh(), orderBlockFractal.getLow());
-                        orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                        orderBlockWithImbalances.add(orderBlock);
-                    } else {
-                        orderBlock = prepareOrderBlock(orderBlockFractal.getLow(), orderBlockFractal.getHigh());
-                        orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                        orderBlockWithImbalances.add(orderBlock);
-                    }
-                    continue;
-                }
-
+            float op, sl;
+            if (!imbalances.isEmpty()) {
+                Pair<Candle, Candle> imbalance = imbalances.get(0);
                 if (isUp) {
-                    if ((i < orderBlockFractalsList.size() - 1 &&
-                            imbalances.get(0).getFirst().getStartDateTime().isBefore(orderBlockFractalsList.get(i + 1).getStartDateTime()))
-                            || i == orderBlockFractalsList.size() - 1) {
-                        if (imbalance.getSecond().getLow() - orderBlockFractal.getHigh() <= orderBlockFractal.getHigh() - orderBlockFractal.getLow()) {
-                            orderBlocks.add(Pair.of(imbalance.getSecond(), orderBlockFractal));
-                            orderBlock = prepareOrderBlock(imbalance.getSecond().getLow(), orderBlockFractal.getLow());
-                            orderBlockWithImbalances.add(orderBlock);
-                        } else {
-                            orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                            orderBlock = prepareOrderBlock(orderBlockFractal.getHigh(), orderBlockFractal.getLow());
-                            orderBlockWithImbalances.add(orderBlock);
-                        }
-                        imbalances.remove(imbalance);
-                    } else {
-                        orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                        orderBlock = prepareOrderBlock(orderBlockFractal.getHigh(), orderBlockFractal.getLow());
-                        orderBlockWithImbalances.add(orderBlock);
-                    }
+                    op = imbalance.getSecond().getLow();
+                    sl = obCandle.getLow();
                 } else {
-                    if ((i < orderBlockFractalsList.size() - 1 &&
-                            !imbalances.get(0).getFirst().getStartDateTime().isAfter(orderBlockFractalsList.get(i + 1).getStartDateTime())
-                            || i == orderBlockFractalsList.size() - 1)) {
-                        if (orderBlockFractal.getLow() - imbalance.getSecond().getHigh() <= orderBlockFractal.getHigh() - orderBlockFractal.getLow()) {
-                            orderBlocks.add(Pair.of(imbalance.getSecond(), orderBlockFractal));
-                            orderBlock = prepareOrderBlock(imbalance.getSecond().getHigh(), orderBlockFractal.getHigh());
-                            orderBlockWithImbalances.add(orderBlock);
-                        } else {
-                            orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                            orderBlock = prepareOrderBlock(orderBlockFractal.getLow(), orderBlockFractal.getHigh());
-                            orderBlockWithImbalances.add(orderBlock);
-                        }
-                        imbalances.remove(imbalance);
-
-                    } else {
-                        orderBlocks.add(Pair.of(orderBlockFractal, orderBlockFractal));
-                        orderBlock = prepareOrderBlock(orderBlockFractal.getLow(), orderBlockFractal.getHigh());
-                        orderBlockWithImbalances.add(orderBlock);
-                    }
+                    op = imbalance.getSecond().getHigh();
+                    sl = obCandle.getHigh();
                 }
+                obWithImbalance = Pair.of(obCandle, imbalance.getSecond());
+            } else {
+                if (isUp) {
+                    op = obCandle.getHigh();
+                    sl = obCandle.getLow();
+                } else {
+                    op = obCandle.getLow();
+                    sl = obCandle.getHigh();
+                }
+                obWithImbalance = Pair.of(obCandle, obCandle);
             }
 
-            if (!orderBlocks.isEmpty()) {
-                log.info("OrderBlock first candle: " + orderBlocks.get(0).getFirst() +
-                        "second candle: " + orderBlocks.get(0).getSecond());
+            OrderBlock orderBlock = prepareOrderBlock(op, sl, isUp);
+
+            log.info("OrderBlock first candle: " + obWithImbalance.getFirst() +
+                    "second candle: " + obWithImbalance.getSecond());
+
+            if (abs(sl - op) > 0.0005) {
+                op = (float) (isUp ? sl + 0.0005 : sl - 0.0005);
+                float tp = (float) (isUp ? op + 0.00275 : op - 0.00275);
+
+                orderBlock.setOpenPrice(op);
+                orderBlock.setTakeProfit(tp);
             }
-            orderBlockWithImbalances.forEach(ob -> {
-                float op = ob.getOpenPrice();
-                float sl = ob.getStopLoss();
-                if (abs(sl - op) > 0.0005) {
-                    op = (float) (isUp ? sl + 0.0005 : sl - 0.0005);
-                    float tp = (float) (isUp ? op + 0.00275 : op - 0.00275);
 
-                    ob.setOpenPrice(op);
-                    ob.setTakeProfit(tp);
-                }
-
-
-            });
-            return orderBlockWithImbalances;
+            return Optional.of(orderBlock);
         }
 
-        return emptyListOfOrderBlocks;
+        return Optional.empty();
     }
 
-    private boolean areTwoZonesIntercept(Candle first, Candle second) {
-        if (isUp) {
-            return first.getHigh() >= second.getLow();
-        } else {
-            return first.getLow() <= second.getHigh();
-        }
-    }
-
-    private boolean isOneZoneInsideAnother(Candle first, Candle second) {
-        if (isUp) {
-            return first.getHigh() >= second.getHigh();
-        } else {
-            return first.getLow() <= second.getLow();
-        }
-    }
-
-    private String orderBlockListToString(List<OrderBlock> orderBlocksList) {
-        StringBuilder result = new StringBuilder();
-        for (OrderBlock orderBlock : orderBlocksList) {
-            result.append(orderBlock.toString());
-            result.append("\n");
-        }
-
-        return result.toString();
-    }
-
-    private OrderBlock prepareOrderBlock(Float price, Float sl) {
+    private OrderBlock prepareOrderBlock(Float price, Float sl, boolean isUp) {
         float tp;
         if (isUp) {
             sl -= (float) 0.0001;
@@ -284,172 +178,112 @@ public class TradingService {
         return orderBlock;
     }
 
-    public void calculateImbalances(List<Candle> candles, LocalDateTime zoneBegin, LocalDateTime zoneEnd) {
+    public Candle calculateImbalances(List<Candle> candles, LocalDateTime zoneBegin, LocalDateTime zoneEnd, boolean isUp) {
+        candles = candles.stream().filter(candle ->
+                        !candle.getStartDateTime().isBefore(zoneBegin.atOffset(ZoneOffset.UTC)) &&
+                                candle.getStartDateTime().isBefore(zoneEnd.atOffset(ZoneOffset.UTC)))
+                .collect(Collectors.toList());
+        Candle max = candles.get(0);
+        Candle min = candles.get(0);
 
-        List<Pair<Boolean, Candle>> fractalCandles = getFractalCandles(candles);
-        LocalDateTime firstZone = zoneBegin.plusMinutes(24);
-
-        isUp = fractalCandles.get(0).getFirst();
-        currentDiapason = Pair.of(candles.get(0), fractalCandles.get(0).getSecond());
-
-        for (Pair<Boolean, Candle> currentFractal : fractalCandles) {
-            calculateTrend(currentFractal);
-
-            Candle currentCandle = currentFractal.getSecond();
-
-            if (!zoneMin.isEmpty()) {
-                zoneMin.removeIf(minCandle -> currentCandle.getLow() < minCandle.getLow());
-            }
-            if (!zoneMax.isEmpty()) {
-                zoneMax.removeIf(maxCandle -> currentCandle.getHigh() > maxCandle.getHigh());
-            }
-            OffsetDateTime currentTime = currentCandle.getStartDateTime();
-            if (!currentTime.isBefore(zoneBegin.atOffset(ZoneOffset.UTC)) &&
-                    !currentTime.isAfter(zoneEnd.atOffset(ZoneOffset.UTC))) {
-                if (currentFractal.getFirst()) {
-                    if (zoneMax.isEmpty() || !currentCandle.getStartDateTime().isAfter(firstZone.atOffset(ZoneOffset.UTC))) {
-                        zoneMax.add(currentCandle);
-                    }
-                } else {
-                    if (zoneMin.isEmpty() || !currentCandle.getStartDateTime().isAfter(firstZone.atOffset(ZoneOffset.UTC))) {
-                        zoneMin.add(currentCandle);
-                    }
-                }
-            }
-        }
-
-        Candle lastCandle = candles.get(candles.size() - 1);
-        zoneMin.removeIf(minCandle -> lastCandle.getLow() < minCandle.getLow());
-        zoneMax.removeIf(maxCandle -> lastCandle.getHigh() > maxCandle.getHigh());
-
-        if (!zoneMax.isEmpty()) {
-            zoneMax = Collections.singletonList(zoneMax.get(0));
-        }
-
-        if (!zoneMin.isEmpty()) {
-            zoneMin = Collections.singletonList(zoneMin.get(0));
-        }
-
-        for (int i = 2; i < candles.size(); i++) {
+        for (int i = 0; i < candles.size(); i++) {
             Candle currentCandle = candles.get(i);
-            Candle imbalanceCandle = candles.get(i - 2);
+            if (i > 1) {
+                Candle beginOfImbalance = candles.get(i - 2);
 
-            if (!currentCandle.getStartDateTime().isAfter(zoneEnd.atOffset(ZoneOffset.UTC))) {
-                if (currentCandle.getLow() > imbalanceCandle.getHigh()) {
-                    downImbalance.add(Pair.of(imbalanceCandle, currentCandle));
+                if (beginOfImbalance.getHigh() < currentCandle.getLow()) {
+                    upImbalance.add(Pair.of(beginOfImbalance, currentCandle));
+                }
+
+                if (beginOfImbalance.getLow() > currentCandle.getHigh()) {
+                    downImbalance.add(Pair.of(beginOfImbalance, currentCandle));
                 }
             }
 
-            downImbalance.removeIf(downImbalanceCandle -> zoneMin.isEmpty() || currentCandle.getLow() <= downImbalanceCandle.getFirst().getHigh() ||
-                    downImbalanceCandle.getFirst().getStartDateTime().isBefore(zoneMin.get(0).getStartDateTime()));
-
-            if (!currentCandle.getStartDateTime().isAfter(zoneEnd.atOffset(ZoneOffset.UTC))) {
-                if (currentCandle.getHigh() < imbalanceCandle.getLow()) {
-                    upImbalance.add(Pair.of(imbalanceCandle, currentCandle));
-                }
+            if (max.getHigh() <= currentCandle.getHigh()) {
+                max = currentCandle;
+                upImbalance.clear();
             }
-            upImbalance.removeIf(upImbalanceCandle -> zoneMax.isEmpty() || currentCandle.getHigh() >= upImbalanceCandle.getFirst().getLow() ||
-                    upImbalanceCandle.getFirst().getStartDateTime().isBefore(zoneMax.get(0).getStartDateTime()));
 
+            if (min.getLow() >= currentCandle.getLow()) {
+                min = currentCandle;
+                downImbalance.clear();
+            }
         }
+
+        return isUp ? min : max;
     }
 
-    private void calculateTrend(Pair<Boolean, Candle> currentFractal) {
-        Candle currentCandle = currentFractal.getSecond();
-        boolean currentUp = currentFractal.getFirst();
+    private boolean calculateTrend(List<Candle> candles) {
+        int i = 0, j = 1;
 
-        if (isUp) {
-            if (currentUp) {
-                if (currentDiapason.getSecond().getHigh() < currentCandle.getHigh()) {
-                    currentDiapason = Pair.of(lh, currentCandle);
-                    impulseBegin = currentCandle;
-                    isCorrection = false;
-                    justBoss = true;
+        while ((candles.get(i).getHigh() < candles.get(j).getHigh() &&
+                candles.get(i).getLow() > candles.get(j).getLow()) ||
+                (candles.get(i).getHigh() > candles.get(j).getHigh() &&
+                        candles.get(i).getLow() < candles.get(j).getLow())) {
+            i++;
+            j++;
+        }
+
+        boolean isUp = candles.get(i).getHigh() < candles.get(j).getHigh();
+        currentDiapason = Pair.of(candles.get(i), candles.get(j));
+
+        Candle max = candles.get(i);
+        Candle min = candles.get(i);
+
+        for (i = j; i < candles.size(); i++) {
+            Candle currentCandle = candles.get(i);
+
+            if (hasTrendChanged(isUp, currentCandle)) {
+                isCorrection = false;
+                max = min = currentCandle;
+                isUp = !isUp;
+                currentDiapason = Pair.of(currentDiapason.getSecond(), currentCandle);
+            } else if (isContinuingTrend(isUp, currentCandle)) {
+                if (!isCorrection) {
+                    currentDiapason = Pair.of(currentDiapason.getFirst(), currentCandle);
                 } else {
-                    isCorrection = true;
-                    justBoss = false;
+                    currentDiapason = Pair.of(isUp ? min : max, currentCandle);
+                    isCorrection = false;
+                }
+            } else if (isCorrectionCandle(isUp, currentCandle)) {
+                if (currentCandle.getHigh() >= max.getHigh()) {
+                    max = currentCandle;
                 }
 
-            } else {
-                if (currentDiapason.getFirst().getLow() > currentCandle.getLow()) {
-                    isUp = false;
-                    justBoss = true;
-                    currentDiapason = Pair.of(currentDiapason.getSecond(), currentCandle);
-                    isCorrection = false;
-                } else {
-                    if (justBoss) {
-                        lh = currentCandle;
-                    } else if (lh.getLow() > currentCandle.getLow()) {
-                        lh = currentCandle;
-                    }
-                    justBoss = false;
-                    isCorrection = true;
+                if (currentCandle.getLow() <= min.getLow()) {
+                    min = currentCandle;
                 }
+
+                isCorrection = true;
             }
-        } else {
-            if (!currentUp) {
-                if (currentDiapason.getSecond().getLow() > currentCandle.getLow()) {
-                    currentDiapason = Pair.of(hl, currentCandle);
-                    isCorrection = false;
-                    impulseBegin = currentCandle;
-                    justBoss = true;
-                } else {
-                    isCorrection = true;
-                    justBoss = false;
+
+            if (isCorrection) {
+                if (max.getHigh() <= currentCandle.getHigh()) {
+                    max = currentCandle;
                 }
-            } else {
-                if (currentDiapason.getFirst().getHigh() < currentCandle.getHigh()) {
-                    isUp = true;
-                    justBoss = true;
-                    currentDiapason = Pair.of(currentDiapason.getSecond(), currentCandle);
-                    isCorrection = false;
-                } else {
-                    if (justBoss) {
-                        hl = currentCandle;
-                    } else if (hl.getHigh() < currentCandle.getHigh()) {
-                        hl = currentCandle;
-                    }
-                    justBoss = false;
-                    isCorrection = true;
+
+                if (min.getLow() >= currentCandle.getLow()) {
+                    min = currentCandle;
                 }
             }
         }
 
+        return isUp;
     }
 
-    private List<Pair<Boolean, Candle>> getFractalCandles(List<Candle> candles) {
-        List<Pair<Boolean, Candle>> fractalCandles = new ArrayList<>();
-        for (int i = 0; i < candles.size() - 4; i++) {
-            float difference = 0.0000001F;
-
-            if ((candles.get(i + 2).getHigh() > candles.get(i).getHigh() || abs(candles.get(i + 2).getHigh() - candles.get(i).getHigh()) < difference) &&
-                    (candles.get(i + 2).getHigh() > candles.get(i + 1).getHigh() || abs(candles.get(i + 2).getHigh() - candles.get(i + 1).getHigh()) < difference) &&
-                    (candles.get(i + 2).getHigh() > candles.get(i + 3).getHigh() || abs(candles.get(i + 2).getHigh() - candles.get(i + 3).getHigh()) < difference) &&
-                    (candles.get(i + 2).getHigh() > candles.get(i + 4).getHigh() || abs(candles.get(i + 2).getHigh() - candles.get(i + 4).getHigh()) < difference)) {
-                if (!fractalCandles.isEmpty()) {
-                    int pos = fractalCandles.size() - 1;
-                    if ((fractalCandles.get(pos).getFirst()
-                            && Objects.equals(fractalCandles.get(pos).getSecond().getHigh(), candles.get(i + 2).getHigh()))) {
-                        continue;
-                    }
-                }
-                fractalCandles.add(Pair.of(true, candles.get(i + 2)));
-            } else if ((candles.get(i + 2).getLow() < candles.get(i).getLow() || abs(candles.get(i).getLow() - candles.get(i + 2).getLow()) < difference) &&
-                    (candles.get(i + 2).getLow() < candles.get(i + 1).getLow() || abs(candles.get(i + 1).getLow() - candles.get(i + 2).getLow()) < difference) &&
-                    (candles.get(i + 2).getLow() < candles.get(i + 3).getLow() || abs(candles.get(i + 3).getLow() - candles.get(i + 2).getLow()) < difference) &&
-                    (candles.get(i + 2).getLow() < candles.get(i + 4).getLow() || abs(candles.get(i + 4).getLow() - candles.get(i + 2).getLow()) < difference)) {
-                if (!fractalCandles.isEmpty()) {
-                    int pos = fractalCandles.size() - 1;
-                    if ((!fractalCandles.get(pos).getFirst()
-                            && Objects.equals(fractalCandles.get(pos).getSecond().getLow(), candles.get(i + 2).getLow()))) {
-                        continue;
-                    }
-                }
-                fractalCandles.add(Pair.of(false, candles.get(i + 2)));
-            }
-        }
-
-        return fractalCandles;
+    private boolean isCorrectionCandle(boolean isUp, Candle currentCandle) {
+        return (isUp && abs((currentDiapason.getSecond().getHigh() - currentCandle.getLow()) / (currentDiapason.getFirst().getLow() - currentDiapason.getSecond().getHigh())) > 0.38) ||
+                (!isUp && abs((currentDiapason.getSecond().getLow() - currentCandle.getHigh()) / (currentDiapason.getFirst().getHigh() - currentDiapason.getSecond().getLow())) > 0.38);
     }
 
+    private boolean hasTrendChanged(boolean isUp, Candle currentCandle) {
+        return (isUp && currentCandle.getLow() < currentDiapason.getFirst().getLow()) ||
+                (!isUp && currentCandle.getHigh() > currentDiapason.getFirst().getHigh());
+    }
+
+    private boolean isContinuingTrend(boolean isUp, Candle currentCandle) {
+        return (isUp && currentCandle.getHigh() >= currentDiapason.getSecond().getHigh()) ||
+                (!isUp && currentCandle.getLow() <= currentDiapason.getSecond().getLow());
+    }
 }
